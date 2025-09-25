@@ -28,6 +28,10 @@ struct MandelbrotApp {
     dragging: bool,
     last_mouse_pos: Option<egui::Pos2>,
     needs_redraw: bool,
+    // Zoom rectangle selection
+    zoom_rect_start: Option<egui::Pos2>,
+    zoom_rect_end: Option<egui::Pos2>,
+    selecting_zoom_rect: bool,
     // Fractal type and Julia set parameters
     fractal_type: FractalType,
     julia_c_real: f64,
@@ -50,6 +54,9 @@ impl Default for MandelbrotApp {
             julia_c_real: -0.7269,  // Interesting Julia set constant
             julia_c_imag: 0.1889,
             show_controls: true,
+            zoom_rect_start: None,
+            zoom_rect_end: None,
+            selecting_zoom_rect: false,
         }
     }
 }
@@ -148,7 +155,8 @@ impl App for MandelbrotApp {
                 ui.label("Controls:");
                 ui.label("• Mouse wheel: Zoom");
                 ui.label("• Click & drag: Pan");
-                ui.label("• This panel: Toggle with Tab");
+                ui.label("• Shift + drag: Zoom to rectangle");
+                ui.label("• Tab: Toggle this panel");
 
                 if ui.button("Reset View").clicked() {
                     if self.fractal_type == FractalType::Mandelbrot {
@@ -186,13 +194,17 @@ impl App for MandelbrotApp {
             }
 
             // Display the image and get response for interaction
-            let response = if let Some(texture) = &self.texture {
-                ui.image(texture)
+            let (response, image_rect) = if let Some(texture) = &self.texture {
+                let img_response = ui.add(egui::Image::from_texture(texture).sense(egui::Sense::click_and_drag()));
+                let rect = img_response.rect;
+                (img_response, rect)
             } else {
-                ui.allocate_response(
+                let resp = ui.allocate_response(
                     egui::vec2(WIDTH as f32, HEIGHT as f32), 
                     egui::Sense::click_and_drag()
-                )
+                );
+                let rect = resp.rect;
+                (resp, rect)
             };
 
             // Handle zoom with scroll wheel
@@ -205,40 +217,120 @@ impl App for MandelbrotApp {
                 }
             }
 
-            // Handle pan with mouse drag
+            // Handle zoom rectangle selection (Shift + drag) or pan (normal drag)
+            let shift_held = ctx.input(|i| i.modifiers.shift);
+            
+            if response.drag_started() {
+                if let Some(mouse_pos) = ctx.input(|i| i.pointer.interact_pos()) {
+                    // Only process if mouse is within the image
+                    if image_rect.contains(mouse_pos) {
+                        if shift_held {
+                            // Start zoom rectangle selection
+                            self.zoom_rect_start = Some(mouse_pos);
+                            self.selecting_zoom_rect = true;
+                        } else {
+                            // Start panning
+                            self.last_mouse_pos = Some(mouse_pos);
+                            self.dragging = true;
+                        }
+                    }
+                }
+            }
+            
             if response.dragged() {
                 if let Some(mouse_pos) = ctx.input(|i| i.pointer.interact_pos()) {
-                    if let Some(last_pos) = self.last_mouse_pos {
-                        let delta = mouse_pos - last_pos;
-                        
-                        // Convert pixel delta to complex plane delta
-                        let aspect_ratio = WIDTH as f64 / HEIGHT as f64;
-                        let height_range = 3.0 / self.zoom;
-                        let width_range = height_range * aspect_ratio;
-                        
-                        let scale_x = width_range / WIDTH as f64;
-                        let scale_y = height_range / HEIGHT as f64;
-                        
-                        self.center_x -= delta.x as f64 * scale_x;
-                        self.center_y -= delta.y as f64 * scale_y;
-                        
-                        self.needs_redraw = true;
+                    if self.selecting_zoom_rect && shift_held {
+                        // Update zoom rectangle end point
+                        self.zoom_rect_end = Some(mouse_pos);
+                    } else if self.dragging && !shift_held {
+                        // Handle panning
+                        if let Some(last_pos) = self.last_mouse_pos {
+                            let delta = mouse_pos - last_pos;
+                            
+                            // Convert pixel delta to complex plane delta
+                            let aspect_ratio = WIDTH as f64 / HEIGHT as f64;
+                            let height_range = 3.0 / self.zoom;
+                            let width_range = height_range * aspect_ratio;
+                            
+                            let scale_x = width_range / WIDTH as f64;
+                            let scale_y = height_range / HEIGHT as f64;
+                            
+                            self.center_x -= delta.x as f64 * scale_x;
+                            self.center_y -= delta.y as f64 * scale_y;
+                            
+                            self.needs_redraw = true;
+                        }
+                        self.last_mouse_pos = Some(mouse_pos);
                     }
-                    self.last_mouse_pos = Some(mouse_pos);
-                    self.dragging = true;
                 }
-            } else {
-                self.dragging = false;
-                self.last_mouse_pos = None;
+            }
+            
+            if response.drag_stopped() {
+                if self.selecting_zoom_rect {
+                    // Complete zoom rectangle selection
+                    if let (Some(start), Some(end)) = (self.zoom_rect_start, self.zoom_rect_end) {
+
+                        self.zoom_to_rectangle(start, end, image_rect);
+                    }
+                    self.zoom_rect_start = None;
+                    self.zoom_rect_end = None;
+                    self.selecting_zoom_rect = false;
+                } else {
+                    self.dragging = false;
+                    self.last_mouse_pos = None;
+                }
             }
 
+            // Draw zoom rectangle if selecting
+            if let (Some(start), Some(end)) = (self.zoom_rect_start, self.zoom_rect_end) {
+                let rect = egui::Rect::from_two_pos(start, end);
+                let rect_width = (end.x - start.x).abs();
+                let rect_height = (end.y - start.y).abs();
+                
+                // Change color based on rectangle validity
+                let (stroke_color, fill_color) = if rect_width >= 10.0 && rect_height >= 10.0 {
+                    (egui::Color32::LIGHT_GREEN, egui::Color32::from_rgba_unmultiplied(0, 255, 0, 30))
+                } else {
+                    (egui::Color32::LIGHT_RED, egui::Color32::from_rgba_unmultiplied(255, 0, 0, 30))
+                };
+                
+                // Draw filled rectangle background
+                ui.painter().rect_filled(rect, 0.0, fill_color);
+                
+                // Draw rectangle outline
+                ui.painter().rect_stroke(
+                    rect,
+                    0.0,
+                    egui::Stroke::new(2.0, stroke_color)
+                );
+                
+                // Draw corner indicators
+                let corner_size = 4.0;
+                ui.painter().circle_filled(rect.left_top(), corner_size, stroke_color);
+                ui.painter().circle_filled(rect.right_top(), corner_size, stroke_color);
+                ui.painter().circle_filled(rect.left_bottom(), corner_size, stroke_color);
+                ui.painter().circle_filled(rect.right_bottom(), corner_size, stroke_color);
+                
+                // Show size hint
+                let size_text = format!("{}x{} px", rect_width as i32, rect_height as i32);
+                let text_pos = rect.center() + egui::vec2(0.0, -15.0);
+                ui.painter().text(
+                    text_pos,
+                    egui::Align2::CENTER_CENTER,
+                    &size_text,
+                    egui::FontId::monospace(12.0),
+                    stroke_color,
+                );
+            }
+            
             // Show toggle hint if controls are hidden
             if !self.show_controls {
                 ui.allocate_ui_at_rect(
-                    egui::Rect::from_min_size(response.rect.left_top(), egui::vec2(150.0, 30.0)),
+                    egui::Rect::from_min_size(response.rect.left_top(), egui::vec2(200.0, 50.0)),
                     |ui| {
                         ui.group(|ui| {
                             ui.label("Press Tab for controls");
+                            ui.label("Shift+drag to zoom to area");
                         });
                     }
                 );
@@ -313,6 +405,73 @@ impl MandelbrotApp {
             }
         }
         image
+    }
+    
+    fn zoom_to_rectangle(&mut self, start: egui::Pos2, end: egui::Pos2, image_rect: egui::Rect) {
+        // Ensure we have a valid rectangle
+        let rect_width = (end.x - start.x).abs();
+        let rect_height = (end.y - start.y).abs();
+        
+        // Ignore tiny rectangles (likely accidental clicks)
+        if rect_width < 10.0 || rect_height < 10.0 {
+            return;
+        }
+        
+        // Ensure start is top-left and end is bottom-right
+        let rect_start = egui::Pos2::new(start.x.min(end.x), start.y.min(end.y));
+        let rect_end = egui::Pos2::new(start.x.max(end.x), start.y.max(end.y));
+        
+        // Convert rectangle to relative coordinates within the image
+        let rel_start_x = (rect_start.x - image_rect.left()) / image_rect.width();
+        let rel_start_y = (rect_start.y - image_rect.top()) / image_rect.height();
+        let rel_end_x = (rect_end.x - image_rect.left()) / image_rect.width();
+        let rel_end_y = (rect_end.y - image_rect.top()) / image_rect.height();
+        
+        // Clamp to valid range
+        let rel_start_x = rel_start_x.clamp(0.0, 1.0);
+        let rel_start_y = rel_start_y.clamp(0.0, 1.0);
+        let rel_end_x = rel_end_x.clamp(0.0, 1.0);
+        let rel_end_y = rel_end_y.clamp(0.0, 1.0);
+        
+        // Calculate current view bounds in complex plane
+        let aspect_ratio = WIDTH as f64 / HEIGHT as f64;
+        let height_range = 3.0 / self.zoom;
+        let width_range = height_range * aspect_ratio;
+        
+        let current_left = self.center_x - width_range / 2.0;
+        let current_right = self.center_x + width_range / 2.0;
+        let current_top = self.center_y - height_range / 2.0;
+        let current_bottom = self.center_y + height_range / 2.0;
+        
+        // Map relative coordinates to complex plane coordinates
+        let selected_left = current_left + rel_start_x as f64 * (current_right - current_left);
+        let selected_right = current_left + rel_end_x as f64 * (current_right - current_left);
+        let selected_top = current_top + rel_start_y as f64 * (current_bottom - current_top);
+        let selected_bottom = current_top + rel_end_y as f64 * (current_bottom - current_top);
+        
+        // Calculate new center
+        let new_center_x = (selected_left + selected_right) / 2.0;
+        let new_center_y = (selected_top + selected_bottom) / 2.0;
+        
+        // Calculate how much we need to zoom to fit the selected rectangle
+        let selected_width = selected_right - selected_left;
+        let selected_height = selected_bottom - selected_top;
+        
+        // Calculate zoom factor to fit the selection in the viewport
+        let zoom_factor_x = width_range / selected_width;
+        let zoom_factor_y = height_range / selected_height;
+        let zoom_factor = zoom_factor_x.min(zoom_factor_y);
+        
+        // Apply the zoom (only if it would zoom in)
+        
+        if zoom_factor > 1.0 {
+            self.center_x = new_center_x;
+            self.center_y = new_center_y;
+            self.zoom *= zoom_factor;
+            self.needs_redraw = true;
+        } else {
+            // Show visual feedback for invalid rectangle selection
+        }
     }
 }
 
