@@ -385,18 +385,69 @@ impl MandelbrotApp {
                 let color = if iter == max_iter {
                     egui::Color32::BLACK
                 } else {
-                    // Color scheme varies by fractal type
+                    // High-contrast color schemes for better visibility
                     match self.fractal_type {
                         FractalType::Mandelbrot => {
-                            let intensity = (iter * 255 / max_iter) as u8;
-                            egui::Color32::from_rgb(intensity, intensity / 2, 255 - intensity)
+                            // Hot color palette: black -> red -> yellow -> white
+                            let t = iter as f64 / max_iter as f64;
+                            let t = t.powf(0.5); // Apply gamma correction for better distribution
+                            
+                            if t < 0.25 {
+                                // Black to red
+                                let intensity = (t * 4.0 * 255.0) as u8;
+                                egui::Color32::from_rgb(intensity, 0, 0)
+                            } else if t < 0.5 {
+                                // Red to yellow
+                                let intensity = ((t - 0.25) * 4.0 * 255.0) as u8;
+                                egui::Color32::from_rgb(255, intensity, 0)
+                            } else if t < 0.75 {
+                                // Yellow to white
+                                let intensity = ((t - 0.5) * 4.0 * 255.0) as u8;
+                                egui::Color32::from_rgb(255, 255, intensity)
+                            } else {
+                                // White with slight blue tint for highest iterations
+                                let intensity = ((t - 0.75) * 4.0 * 128.0) as u8;
+                                egui::Color32::from_rgb(255, 255, 255 - intensity)
+                            }
                         },
                         FractalType::Julia => {
+                            // Rainbow palette with high contrast
                             let t = iter as f64 / max_iter as f64;
-                            let r = (255.0 * (0.5 + 0.5 * (t * 3.0).sin())) as u8;
-                            let g = (255.0 * (0.5 + 0.5 * (t * 5.0 + 2.0).sin())) as u8;
-                            let b = (255.0 * (0.5 + 0.5 * (t * 7.0 + 4.0).sin())) as u8;
-                            egui::Color32::from_rgb(r, g, b)
+                            let t = t.powf(0.7); // Gamma correction
+                            let hue = t * 6.0; // 6 color segments
+                            
+                            match hue as i32 {
+                                0 => {
+                                    // Red to Orange
+                                    let f = hue.fract();
+                                    egui::Color32::from_rgb(255, (f * 165.0) as u8, 0)
+                                },
+                                1 => {
+                                    // Orange to Yellow
+                                    let f = hue.fract();
+                                    egui::Color32::from_rgb(255, (165.0 + f * 90.0) as u8, 0)
+                                },
+                                2 => {
+                                    // Yellow to Green
+                                    let f = hue.fract();
+                                    egui::Color32::from_rgb((255.0 * (1.0 - f)) as u8, 255, 0)
+                                },
+                                3 => {
+                                    // Green to Cyan
+                                    let f = hue.fract();
+                                    egui::Color32::from_rgb(0, 255, (f * 255.0) as u8)
+                                },
+                                4 => {
+                                    // Cyan to Blue
+                                    let f = hue.fract();
+                                    egui::Color32::from_rgb(0, (255.0 * (1.0 - f)) as u8, 255)
+                                },
+                                _ => {
+                                    // Blue to Magenta
+                                    let f = hue.fract();
+                                    egui::Color32::from_rgb((f * 255.0) as u8, 0, 255)
+                                }
+                            }
                         }
                     }
                 };
