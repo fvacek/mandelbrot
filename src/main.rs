@@ -113,13 +113,13 @@ impl App for MandelbrotApp {
                 // Julia set parameters (only show for Julia set)
                 if self.fractal_type == FractalType::Julia {
                     ui.label("Julia Set Parameters:");
-                    
+
                     if ui.add(egui::Slider::new(&mut self.julia_c_real, -2.0..=2.0)
                         .text("c (real)")
                         .step_by(0.001)).changed() {
                         self.needs_redraw = true;
                     }
-                    
+
                     if ui.add(egui::Slider::new(&mut self.julia_c_imag, -2.0..=2.0)
                         .text("c (imaginary)")
                         .step_by(0.001)).changed() {
@@ -128,25 +128,25 @@ impl App for MandelbrotApp {
 
                     ui.separator();
                     ui.label("Presets:");
-                    
+
                     if ui.button("Dragon").clicked() {
                         self.julia_c_real = -0.7269;
                         self.julia_c_imag = 0.1889;
                         self.needs_redraw = true;
                     }
-                    
+
                     if ui.button("Spiral").clicked() {
                         self.julia_c_real = -0.75;
                         self.julia_c_imag = 0.11;
                         self.needs_redraw = true;
                     }
-                    
+
                     if ui.button("Lightning").clicked() {
                         self.julia_c_real = -0.4;
                         self.julia_c_imag = 0.6;
                         self.needs_redraw = true;
                     }
-                    
+
                     if ui.button("Douady Rabbit").clicked() {
                         self.julia_c_real = -0.123;
                         self.julia_c_imag = 0.745;
@@ -215,7 +215,7 @@ impl App for MandelbrotApp {
                 (img_response, rect)
             } else {
                 let resp = ui.allocate_response(
-                    egui::vec2(WIDTH as f32, HEIGHT as f32), 
+                    egui::vec2(WIDTH as f32, HEIGHT as f32),
                     egui::Sense::click_and_drag()
                 );
                 let rect = resp.rect;
@@ -234,7 +234,7 @@ impl App for MandelbrotApp {
 
             // Handle zoom rectangle selection (Shift + drag) or pan (normal drag)
             let shift_held = ctx.input(|i| i.modifiers.shift);
-            
+
             if response.drag_started() {
                 if let Some(mouse_pos) = ctx.input(|i| i.pointer.interact_pos()) {
                     // Only process if mouse is within the image
@@ -251,7 +251,7 @@ impl App for MandelbrotApp {
                     }
                 }
             }
-            
+
             if response.dragged() {
                 if let Some(mouse_pos) = ctx.input(|i| i.pointer.interact_pos()) {
                     if self.selecting_zoom_rect && shift_held {
@@ -261,25 +261,25 @@ impl App for MandelbrotApp {
                         // Handle panning
                         if let Some(last_pos) = self.last_mouse_pos {
                             let delta = mouse_pos - last_pos;
-                            
+
                             // Convert pixel delta to complex plane delta
                             let aspect_ratio = WIDTH as f64 / HEIGHT as f64;
                             let height_range = 3.0 / self.zoom;
                             let width_range = height_range * aspect_ratio;
-                            
+
                             let scale_x = width_range / WIDTH as f64;
                             let scale_y = height_range / HEIGHT as f64;
-                            
+
                             self.center_x -= delta.x as f64 * scale_x;
                             self.center_y -= delta.y as f64 * scale_y;
-                            
+
                             self.needs_redraw = true;
                         }
                         self.last_mouse_pos = Some(mouse_pos);
                     }
                 }
             }
-            
+
             if response.drag_stopped() {
                 if self.selecting_zoom_rect {
                     // Complete zoom rectangle selection
@@ -301,31 +301,31 @@ impl App for MandelbrotApp {
                 let rect = egui::Rect::from_two_pos(start, end);
                 let rect_width = (end.x - start.x).abs();
                 let rect_height = (end.y - start.y).abs();
-                
+
                 // Change color based on rectangle validity
                 let (stroke_color, fill_color) = if rect_width >= 10.0 && rect_height >= 10.0 {
                     (egui::Color32::LIGHT_GREEN, egui::Color32::from_rgba_unmultiplied(0, 255, 0, 30))
                 } else {
                     (egui::Color32::LIGHT_RED, egui::Color32::from_rgba_unmultiplied(255, 0, 0, 30))
                 };
-                
+
                 // Draw filled rectangle background
                 ui.painter().rect_filled(rect, 0.0, fill_color);
-                
+
                 // Draw rectangle outline
                 ui.painter().rect_stroke(
                     rect,
                     0.0,
                     egui::Stroke::new(2.0, stroke_color)
                 );
-                
+
                 // Draw corner indicators
                 let corner_size = 4.0;
                 ui.painter().circle_filled(rect.left_top(), corner_size, stroke_color);
                 ui.painter().circle_filled(rect.right_top(), corner_size, stroke_color);
                 ui.painter().circle_filled(rect.left_bottom(), corner_size, stroke_color);
                 ui.painter().circle_filled(rect.right_bottom(), corner_size, stroke_color);
-                
+
                 // Show size hint
                 let size_text = format!("{}x{} px", rect_width as i32, rect_height as i32);
                 let text_pos = rect.center() + egui::vec2(0.0, -15.0);
@@ -337,7 +337,7 @@ impl App for MandelbrotApp {
                     stroke_color,
                 );
             }
-            
+
             // Show toggle hint if controls are hidden
             if !self.show_controls {
                 ui.allocate_ui_at_rect(
@@ -412,7 +412,7 @@ impl MandelbrotApp {
                                     // Hot color palette with green: black -> red -> yellow -> green -> cyan -> white
                                     let t = iter as f64 / max_iter as f64;
                                     let t = t.powf(0.5); // Apply gamma correction for better distribution
-                                    
+
                                     if t < 0.2 {
                                         // Black to red
                                         let intensity = (t * 5.0 * 255.0) as u8;
@@ -440,7 +440,7 @@ impl MandelbrotApp {
                                     let t = iter as f64 / max_iter as f64;
                                     let t = t.powf(0.7); // Gamma correction
                                     let hue = t * 6.0; // 6 color segments
-                                    
+
                                     match hue as i32 {
                                         0 => {
                                             // Red to Orange
@@ -489,83 +489,83 @@ impl MandelbrotApp {
     fn generate_koch_curve(&self, image: &mut egui::ColorImage) {
         // Generate Koch snowflake with iteration depth based on zoom level
         let iterations = ((self.zoom.log2() + 1.0).max(0.0) as usize).min(5);
-        
-        // Create initial horizontal line segment for simpler Koch curve
+
+        // Create initial horizontal line segment centered at current view
         let size = 2.0 / self.zoom;
-        
-        let p1 = (-size / 2.0, 0.0);
-        let p2 = (size / 2.0, 0.0);
-        
+
+        let p1 = (self.center_x - size / 2.0, self.center_y);
+        let p2 = (self.center_x + size / 2.0, self.center_y);
+
         // Generate Koch curve for a single line
         let mut segments = Vec::new();
         self.generate_koch_segments(p1, p2, iterations, &mut segments);
-        
+
         // Draw the segments
         for (start, end) in segments {
             self.draw_line(image, start, end);
         }
     }
-    
+
     fn generate_koch_segments(&self, start: (f64, f64), end: (f64, f64), depth: usize, segments: &mut Vec<((f64, f64), (f64, f64))>) {
         if depth == 0 {
             segments.push((start, end));
             return;
         }
-        
+
         // Calculate the four points for Koch curve iteration
         let dx = end.0 - start.0;
         let dy = end.1 - start.1;
-        
+
         // Four key points along the line
         let p1 = start;
         let p2 = (start.0 + dx / 3.0, start.1 + dy / 3.0);
         let p4 = (start.0 + 2.0 * dx / 3.0, start.1 + 2.0 * dy / 3.0);
         let p5 = end;
-        
+
         // Calculate the peak point (equilateral triangle bump)
         let mid_x = (p2.0 + p4.0) / 2.0;
         let mid_y = (p2.1 + p4.1) / 2.0;
-        let segment_length = ((dx * dx + dy * dy).sqrt() / 3.0);
+        let segment_length = (dx * dx + dy * dy).sqrt() / 3.0;
         let height = segment_length * (3.0_f64.sqrt() / 2.0);
-        
+
         // Create the bump perpendicular to the line
         let normal_x = -dy / (dx * dx + dy * dy).sqrt();
         let normal_y = dx / (dx * dx + dy * dy).sqrt();
         let p3 = (mid_x + normal_x * height, mid_y + normal_y * height);
-        
+
         // Recursively generate segments
         self.generate_koch_segments(p1, p2, depth - 1, segments);
         self.generate_koch_segments(p2, p3, depth - 1, segments);
         self.generate_koch_segments(p3, p4, depth - 1, segments);
         self.generate_koch_segments(p4, p5, depth - 1, segments);
     }
-    
+
     fn draw_line(&self, image: &mut egui::ColorImage, start: (f64, f64), end: (f64, f64)) {
         // Convert world coordinates to screen coordinates
         let aspect_ratio = WIDTH as f64 / HEIGHT as f64;
         let height_range = 3.0 / self.zoom;
         let width_range = height_range * aspect_ratio;
-        
+
         let left = self.center_x - width_range / 2.0;
         let right = self.center_x + width_range / 2.0;
         let top = self.center_y - height_range / 2.0;
         let bottom = self.center_y + height_range / 2.0;
-        
+
         let sx = ((start.0 - left) / (right - left) * WIDTH as f64) as i32;
         let sy = ((start.1 - top) / (bottom - top) * HEIGHT as f64) as i32;
         let ex = ((end.0 - left) / (right - left) * WIDTH as f64) as i32;
         let ey = ((end.1 - top) / (bottom - top) * HEIGHT as f64) as i32;
-        
+
         // Simple line drawing with thick lines for better visibility
         let dx = (ex - sx).abs();
         let dy = (ey - sy).abs();
         let steps = dx.max(dy).max(1);
-        
+
         for i in 0..=steps {
             let t = i as f64 / steps as f64;
             let x = (sx as f64 + t * (ex - sx) as f64) as i32;
             let y = (sy as f64 + t * (ey - sy) as f64) as i32;
-            
+
             // Draw thick line (3x3 pixels)
             for dy in -1..=1 {
                 for dx in -1..=1 {
@@ -580,64 +580,64 @@ impl MandelbrotApp {
             }
         }
     }
-    
+
     fn zoom_to_rectangle(&mut self, start: egui::Pos2, end: egui::Pos2, image_rect: egui::Rect) {
         // Ensure we have a valid rectangle
         let rect_width = (end.x - start.x).abs();
         let rect_height = (end.y - start.y).abs();
-        
+
         // Ignore tiny rectangles (likely accidental clicks)
         if rect_width < 10.0 || rect_height < 10.0 {
             return;
         }
-        
+
         // Ensure start is top-left and end is bottom-right
         let rect_start = egui::Pos2::new(start.x.min(end.x), start.y.min(end.y));
         let rect_end = egui::Pos2::new(start.x.max(end.x), start.y.max(end.y));
-        
+
         // Convert rectangle to relative coordinates within the image
         let rel_start_x = (rect_start.x - image_rect.left()) / image_rect.width();
         let rel_start_y = (rect_start.y - image_rect.top()) / image_rect.height();
         let rel_end_x = (rect_end.x - image_rect.left()) / image_rect.width();
         let rel_end_y = (rect_end.y - image_rect.top()) / image_rect.height();
-        
+
         // Clamp to valid range
         let rel_start_x = rel_start_x.clamp(0.0, 1.0);
         let rel_start_y = rel_start_y.clamp(0.0, 1.0);
         let rel_end_x = rel_end_x.clamp(0.0, 1.0);
         let rel_end_y = rel_end_y.clamp(0.0, 1.0);
-        
+
         // Calculate current view bounds in complex plane
         let aspect_ratio = WIDTH as f64 / HEIGHT as f64;
         let height_range = 3.0 / self.zoom;
         let width_range = height_range * aspect_ratio;
-        
+
         let current_left = self.center_x - width_range / 2.0;
         let current_right = self.center_x + width_range / 2.0;
         let current_top = self.center_y - height_range / 2.0;
         let current_bottom = self.center_y + height_range / 2.0;
-        
+
         // Map relative coordinates to complex plane coordinates
         let selected_left = current_left + rel_start_x as f64 * (current_right - current_left);
         let selected_right = current_left + rel_end_x as f64 * (current_right - current_left);
         let selected_top = current_top + rel_start_y as f64 * (current_bottom - current_top);
         let selected_bottom = current_top + rel_end_y as f64 * (current_bottom - current_top);
-        
+
         // Calculate new center
         let new_center_x = (selected_left + selected_right) / 2.0;
         let new_center_y = (selected_top + selected_bottom) / 2.0;
-        
+
         // Calculate how much we need to zoom to fit the selected rectangle
         let selected_width = selected_right - selected_left;
         let selected_height = selected_bottom - selected_top;
-        
+
         // Calculate zoom factor to fit the selection in the viewport
         let zoom_factor_x = width_range / selected_width;
         let zoom_factor_y = height_range / selected_height;
         let zoom_factor = zoom_factor_x.min(zoom_factor_y);
-        
+
         // Apply the zoom (only if it would zoom in)
-        
+
         if zoom_factor > 1.0 {
             self.center_x = new_center_x;
             self.center_y = new_center_y;
