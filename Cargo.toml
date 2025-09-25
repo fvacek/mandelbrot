@@ -1,0 +1,10 @@
+[package]
+name = "mandelbrot"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+env_logger = "0.10.0"
+eframe = "0.27.0"
+image = "0.23"
+num = "0.2"
