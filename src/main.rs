@@ -192,6 +192,43 @@ impl App for MandelbrotApp {
             self.show_controls = !self.show_controls;
         }
 
+        // Handle keyboard navigation for zooming
+        if ctx.input(|i| i.key_pressed(egui::Key::Plus) || i.key_pressed(egui::Key::Equals)) {
+            // Zoom in with + or = key
+            self.zoom *= 1.5;
+            self.needs_redraw = true;
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::Minus)) {
+            // Zoom out with - key
+            self.zoom *= 0.67;
+            self.needs_redraw = true;
+        }
+
+        // Handle arrow keys for panning
+        let pan_distance = 0.1 / self.zoom; // Pan distance scales with zoom level
+        let mut pan_changed = false;
+        
+        if ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) {
+            self.center_x -= pan_distance;
+            pan_changed = true;
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::ArrowRight)) {
+            self.center_x += pan_distance;
+            pan_changed = true;
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
+            self.center_y -= pan_distance;
+            pan_changed = true;
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
+            self.center_y += pan_distance;
+            pan_changed = true;
+        }
+        
+        if pan_changed {
+            self.needs_redraw = true;
+        }
+
         egui::CentralPanel::default().show(ctx, |ui| {
             // Display the texture first
             if self.texture.is_none() || self.needs_redraw {
