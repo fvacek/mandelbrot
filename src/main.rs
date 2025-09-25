@@ -7,6 +7,7 @@ const HEIGHT: u32 = 800;
 enum FractalType {
     Mandelbrot,
     Julia,
+    Koch,
 }
 
 impl FractalType {
@@ -14,6 +15,7 @@ impl FractalType {
         match self {
             FractalType::Mandelbrot => "Mandelbrot Set",
             FractalType::Julia => "Julia Set",
+            FractalType::Koch => "Koch Curve",
         }
     }
 }
@@ -82,6 +84,9 @@ impl App for MandelbrotApp {
                         if ui.selectable_value(&mut self.fractal_type, FractalType::Julia, "Julia Set").changed() {
                             changed = true;
                         }
+                        if ui.selectable_value(&mut self.fractal_type, FractalType::Koch, "Koch Curve").changed() {
+                            changed = true;
+                        }
                     });
 
                 if changed {
@@ -91,10 +96,15 @@ impl App for MandelbrotApp {
                         self.center_x = -0.5;
                         self.center_y = 0.0;
                         self.zoom = 1.0;
-                    } else {
+                    } else if self.fractal_type == FractalType::Julia {
                         self.center_x = 0.0;
                         self.center_y = 0.0;
                         self.zoom = 1.5;
+                    } else {
+                        // Koch curve
+                        self.center_x = 0.0;
+                        self.center_y = -0.2;
+                        self.zoom = 0.8;
                     }
                 }
 
@@ -163,10 +173,15 @@ impl App for MandelbrotApp {
                         self.center_x = -0.5;
                         self.center_y = 0.0;
                         self.zoom = 1.0;
-                    } else {
+                    } else if self.fractal_type == FractalType::Julia {
                         self.center_x = 0.0;
                         self.center_y = 0.0;
                         self.zoom = 1.5;
+                    } else {
+                        // Koch curve
+                        self.center_x = 0.0;
+                        self.center_y = -0.2;
+                        self.zoom = 0.8;
                     }
                     self.needs_redraw = true;
                 }
@@ -343,119 +358,227 @@ impl MandelbrotApp {
     fn generate_fractal_image(&self) -> egui::ColorImage {
         let mut image = egui::ColorImage::new([WIDTH as usize, HEIGHT as usize], egui::Color32::BLACK);
 
-        // Calculate the bounds of the current view
+        match self.fractal_type {
+            FractalType::Koch => {
+                self.generate_koch_curve(&mut image);
+            },
+            _ => {
+                // Calculate the bounds of the current view
+                let aspect_ratio = WIDTH as f64 / HEIGHT as f64;
+                let height_range = 3.0 / self.zoom;
+                let width_range = height_range * aspect_ratio;
+
+                let left = self.center_x - width_range / 2.0;
+                let right = self.center_x + width_range / 2.0;
+                let top = self.center_y - height_range / 2.0;
+                let bottom = self.center_y + height_range / 2.0;
+
+                for y in 0..HEIGHT {
+                    for x in 0..WIDTH {
+                        // Map pixel coordinates to complex plane based on current view
+                        let px = left + (x as f64 / WIDTH as f64) * (right - left);
+                        let py = top + (y as f64 / HEIGHT as f64) * (bottom - top);
+
+                        let (mut zx, mut zy, cx, cy) = match self.fractal_type {
+                            FractalType::Mandelbrot => {
+                                // Mandelbrot: z starts at 0, c is the pixel coordinate
+                                (0.0, 0.0, px, py)
+                            },
+                            FractalType::Julia => {
+                                // Julia: z starts at pixel coordinate, c is fixed
+                                (px, py, self.julia_c_real, self.julia_c_imag)
+                            },
+                            _ => unreachable!(),
+                        };
+
+                        // Increase max iterations for higher zoom levels to maintain detail
+                        let max_iter = (255.0 + (self.zoom.log10() * 100.0).max(0.0)) as i32;
+                        let max_iter = max_iter.min(1000); // Cap at 1000 for performance
+
+                        let mut iter = 0;
+                        while zx * zx + zy * zy < 4.0 && iter < max_iter {
+                            let xtemp = zx * zx - zy * zy + cx;
+                            zy = 2.0 * zx * zy + cy;
+                            zx = xtemp;
+                            iter += 1;
+                        }
+
+                        let color = if iter == max_iter {
+                            egui::Color32::BLACK
+                        } else {
+                            // High-contrast color schemes for better visibility
+                            match self.fractal_type {
+                                FractalType::Mandelbrot => {
+                                    // Hot color palette with green: black -> red -> yellow -> green -> cyan -> white
+                                    let t = iter as f64 / max_iter as f64;
+                                    let t = t.powf(0.5); // Apply gamma correction for better distribution
+                                    
+                                    if t < 0.2 {
+                                        // Black to red
+                                        let intensity = (t * 5.0 * 255.0) as u8;
+                                        egui::Color32::from_rgb(intensity, 0, 0)
+                                    } else if t < 0.4 {
+                                        // Red to yellow
+                                        let intensity = ((t - 0.2) * 5.0 * 255.0) as u8;
+                                        egui::Color32::from_rgb(255, intensity, 0)
+                                    } else if t < 0.6 {
+                                        // Yellow to green
+                                        let intensity = ((t - 0.4) * 5.0 * 255.0) as u8;
+                                        egui::Color32::from_rgb(255 - intensity, 255, 0)
+                                    } else if t < 0.8 {
+                                        // Green to cyan
+                                        let intensity = ((t - 0.6) * 5.0 * 255.0) as u8;
+                                        egui::Color32::from_rgb(0, 255, intensity)
+                                    } else {
+                                        // Cyan to white
+                                        let intensity = ((t - 0.8) * 5.0 * 255.0) as u8;
+                                        egui::Color32::from_rgb(intensity, 255, 255)
+                                    }
+                                },
+                                FractalType::Julia => {
+                                    // Rainbow palette with high contrast
+                                    let t = iter as f64 / max_iter as f64;
+                                    let t = t.powf(0.7); // Gamma correction
+                                    let hue = t * 6.0; // 6 color segments
+                                    
+                                    match hue as i32 {
+                                        0 => {
+                                            // Red to Orange
+                                            let f = hue.fract();
+                                            egui::Color32::from_rgb(255, (f * 165.0) as u8, 0)
+                                        },
+                                        1 => {
+                                            // Orange to Yellow
+                                            let f = hue.fract();
+                                            egui::Color32::from_rgb(255, (165.0 + f * 90.0) as u8, 0)
+                                        },
+                                        2 => {
+                                            // Yellow to Green
+                                            let f = hue.fract();
+                                            egui::Color32::from_rgb((255.0 * (1.0 - f)) as u8, 255, 0)
+                                        },
+                                        3 => {
+                                            // Green to Cyan
+                                            let f = hue.fract();
+                                            egui::Color32::from_rgb(0, 255, (f * 255.0) as u8)
+                                        },
+                                        4 => {
+                                            // Cyan to Blue
+                                            let f = hue.fract();
+                                            egui::Color32::from_rgb(0, (255.0 * (1.0 - f)) as u8, 255)
+                                        },
+                                        _ => {
+                                            // Blue to Magenta
+                                            let f = hue.fract();
+                                            egui::Color32::from_rgb((f * 255.0) as u8, 0, 255)
+                                        }
+                                    }
+                                },
+                                _ => unreachable!(),
+                            }
+                        };
+                        let index = y as usize * image.width() + x as usize;
+                        image.pixels[index] = color;
+                    }
+                }
+            }
+        }
+        image
+    }
+
+    fn generate_koch_curve(&self, image: &mut egui::ColorImage) {
+        // Generate Koch snowflake with iteration depth based on zoom level
+        let iterations = ((self.zoom.log2() + 1.0).max(0.0) as usize).min(5);
+        
+        // Create initial horizontal line segment for simpler Koch curve
+        let size = 2.0 / self.zoom;
+        
+        let p1 = (-size / 2.0, 0.0);
+        let p2 = (size / 2.0, 0.0);
+        
+        // Generate Koch curve for a single line
+        let mut segments = Vec::new();
+        self.generate_koch_segments(p1, p2, iterations, &mut segments);
+        
+        // Draw the segments
+        for (start, end) in segments {
+            self.draw_line(image, start, end);
+        }
+    }
+    
+    fn generate_koch_segments(&self, start: (f64, f64), end: (f64, f64), depth: usize, segments: &mut Vec<((f64, f64), (f64, f64))>) {
+        if depth == 0 {
+            segments.push((start, end));
+            return;
+        }
+        
+        // Calculate the four points for Koch curve iteration
+        let dx = end.0 - start.0;
+        let dy = end.1 - start.1;
+        
+        // Four key points along the line
+        let p1 = start;
+        let p2 = (start.0 + dx / 3.0, start.1 + dy / 3.0);
+        let p4 = (start.0 + 2.0 * dx / 3.0, start.1 + 2.0 * dy / 3.0);
+        let p5 = end;
+        
+        // Calculate the peak point (equilateral triangle bump)
+        let mid_x = (p2.0 + p4.0) / 2.0;
+        let mid_y = (p2.1 + p4.1) / 2.0;
+        let segment_length = ((dx * dx + dy * dy).sqrt() / 3.0);
+        let height = segment_length * (3.0_f64.sqrt() / 2.0);
+        
+        // Create the bump perpendicular to the line
+        let normal_x = -dy / (dx * dx + dy * dy).sqrt();
+        let normal_y = dx / (dx * dx + dy * dy).sqrt();
+        let p3 = (mid_x + normal_x * height, mid_y + normal_y * height);
+        
+        // Recursively generate segments
+        self.generate_koch_segments(p1, p2, depth - 1, segments);
+        self.generate_koch_segments(p2, p3, depth - 1, segments);
+        self.generate_koch_segments(p3, p4, depth - 1, segments);
+        self.generate_koch_segments(p4, p5, depth - 1, segments);
+    }
+    
+    fn draw_line(&self, image: &mut egui::ColorImage, start: (f64, f64), end: (f64, f64)) {
+        // Convert world coordinates to screen coordinates
         let aspect_ratio = WIDTH as f64 / HEIGHT as f64;
         let height_range = 3.0 / self.zoom;
         let width_range = height_range * aspect_ratio;
-
+        
         let left = self.center_x - width_range / 2.0;
         let right = self.center_x + width_range / 2.0;
         let top = self.center_y - height_range / 2.0;
         let bottom = self.center_y + height_range / 2.0;
-
-        for y in 0..HEIGHT {
-            for x in 0..WIDTH {
-                // Map pixel coordinates to complex plane based on current view
-                let px = left + (x as f64 / WIDTH as f64) * (right - left);
-                let py = top + (y as f64 / HEIGHT as f64) * (bottom - top);
-
-                let (mut zx, mut zy, cx, cy) = match self.fractal_type {
-                    FractalType::Mandelbrot => {
-                        // Mandelbrot: z starts at 0, c is the pixel coordinate
-                        (0.0, 0.0, px, py)
-                    },
-                    FractalType::Julia => {
-                        // Julia: z starts at pixel coordinate, c is fixed
-                        (px, py, self.julia_c_real, self.julia_c_imag)
-                    },
-                };
-
-                // Increase max iterations for higher zoom levels to maintain detail
-                let max_iter = (255.0 + (self.zoom.log10() * 100.0).max(0.0)) as i32;
-                let max_iter = max_iter.min(1000); // Cap at 1000 for performance
-
-                let mut iter = 0;
-                while zx * zx + zy * zy < 4.0 && iter < max_iter {
-                    let xtemp = zx * zx - zy * zy + cx;
-                    zy = 2.0 * zx * zy + cy;
-                    zx = xtemp;
-                    iter += 1;
-                }
-
-                let color = if iter == max_iter {
-                    egui::Color32::BLACK
-                } else {
-                    // High-contrast color schemes for better visibility
-                    match self.fractal_type {
-                        FractalType::Mandelbrot => {
-                            // Hot color palette: black -> red -> yellow -> white
-                            let t = iter as f64 / max_iter as f64;
-                            let t = t.powf(0.5); // Apply gamma correction for better distribution
-                            
-                            if t < 0.25 {
-                                // Black to red
-                                let intensity = (t * 4.0 * 255.0) as u8;
-                                egui::Color32::from_rgb(intensity, 0, 0)
-                            } else if t < 0.5 {
-                                // Red to yellow
-                                let intensity = ((t - 0.25) * 4.0 * 255.0) as u8;
-                                egui::Color32::from_rgb(255, intensity, 0)
-                            } else if t < 0.75 {
-                                // Yellow to white
-                                let intensity = ((t - 0.5) * 4.0 * 255.0) as u8;
-                                egui::Color32::from_rgb(255, 255, intensity)
-                            } else {
-                                // White with slight blue tint for highest iterations
-                                let intensity = ((t - 0.75) * 4.0 * 128.0) as u8;
-                                egui::Color32::from_rgb(255, 255, 255 - intensity)
-                            }
-                        },
-                        FractalType::Julia => {
-                            // Rainbow palette with high contrast
-                            let t = iter as f64 / max_iter as f64;
-                            let t = t.powf(0.7); // Gamma correction
-                            let hue = t * 6.0; // 6 color segments
-                            
-                            match hue as i32 {
-                                0 => {
-                                    // Red to Orange
-                                    let f = hue.fract();
-                                    egui::Color32::from_rgb(255, (f * 165.0) as u8, 0)
-                                },
-                                1 => {
-                                    // Orange to Yellow
-                                    let f = hue.fract();
-                                    egui::Color32::from_rgb(255, (165.0 + f * 90.0) as u8, 0)
-                                },
-                                2 => {
-                                    // Yellow to Green
-                                    let f = hue.fract();
-                                    egui::Color32::from_rgb((255.0 * (1.0 - f)) as u8, 255, 0)
-                                },
-                                3 => {
-                                    // Green to Cyan
-                                    let f = hue.fract();
-                                    egui::Color32::from_rgb(0, 255, (f * 255.0) as u8)
-                                },
-                                4 => {
-                                    // Cyan to Blue
-                                    let f = hue.fract();
-                                    egui::Color32::from_rgb(0, (255.0 * (1.0 - f)) as u8, 255)
-                                },
-                                _ => {
-                                    // Blue to Magenta
-                                    let f = hue.fract();
-                                    egui::Color32::from_rgb((f * 255.0) as u8, 0, 255)
-                                }
-                            }
-                        }
+        
+        let sx = ((start.0 - left) / (right - left) * WIDTH as f64) as i32;
+        let sy = ((start.1 - top) / (bottom - top) * HEIGHT as f64) as i32;
+        let ex = ((end.0 - left) / (right - left) * WIDTH as f64) as i32;
+        let ey = ((end.1 - top) / (bottom - top) * HEIGHT as f64) as i32;
+        
+        // Simple line drawing with thick lines for better visibility
+        let dx = (ex - sx).abs();
+        let dy = (ey - sy).abs();
+        let steps = dx.max(dy).max(1);
+        
+        for i in 0..=steps {
+            let t = i as f64 / steps as f64;
+            let x = (sx as f64 + t * (ex - sx) as f64) as i32;
+            let y = (sy as f64 + t * (ey - sy) as f64) as i32;
+            
+            // Draw thick line (3x3 pixels)
+            for dy in -1..=1 {
+                for dx in -1..=1 {
+                    let px = x + dx;
+                    let py = y + dy;
+                    if px >= 0 && px < WIDTH as i32 && py >= 0 && py < HEIGHT as i32 {
+                        let index = py as usize * image.width() + px as usize;
+                        // Use bright green color for Koch curve
+                        image.pixels[index] = egui::Color32::from_rgb(0, 255, 0);
                     }
-                };
-                let index = y as usize * image.width() + x as usize;
-                image.pixels[index] = color;
+                }
             }
         }
-        image
     }
     
     fn zoom_to_rectangle(&mut self, start: egui::Pos2, end: egui::Pos2, image_rect: egui::Rect) {
