@@ -207,7 +207,7 @@ impl App for MandelbrotApp {
         // Handle arrow keys for panning
         let pan_distance = 0.1 / self.zoom; // Pan distance scales with zoom level
         let mut pan_changed = false;
-        
+
         if ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) {
             self.center_x -= pan_distance;
             pan_changed = true;
@@ -224,7 +224,7 @@ impl App for MandelbrotApp {
             self.center_y += pan_distance;
             pan_changed = true;
         }
-        
+
         if pan_changed {
             self.needs_redraw = true;
         }
@@ -277,13 +277,13 @@ impl App for MandelbrotApp {
                     // Only process if mouse is within the image
                     if image_rect.contains(mouse_pos) {
                         if shift_held {
-                            // Start zoom rectangle selection
-                            self.zoom_rect_start = Some(mouse_pos);
-                            self.selecting_zoom_rect = true;
-                        } else {
                             // Start panning
                             self.last_mouse_pos = Some(mouse_pos);
                             self.dragging = true;
+                        } else {
+                            // Start zoom rectangle selection
+                            self.zoom_rect_start = Some(mouse_pos);
+                            self.selecting_zoom_rect = true;
                         }
                     }
                 }
@@ -291,10 +291,10 @@ impl App for MandelbrotApp {
 
             if response.dragged() {
                 if let Some(mouse_pos) = ctx.input(|i| i.pointer.interact_pos()) {
-                    if self.selecting_zoom_rect && shift_held {
+                    if self.selecting_zoom_rect && !shift_held {
                         // Update zoom rectangle end point
                         self.zoom_rect_end = Some(mouse_pos);
-                    } else if self.dragging && !shift_held {
+                    } else if self.dragging && shift_held {
                         // Handle panning
                         if let Some(last_pos) = self.last_mouse_pos {
                             let delta = mouse_pos - last_pos;
